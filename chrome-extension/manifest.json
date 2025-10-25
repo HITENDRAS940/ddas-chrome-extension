@@ -5,7 +5,8 @@
   "description": "Detects duplicate file downloads using hash comparison with cloud storage",
   "permissions": [
     "downloads",
-    "storage"
+    "storage",
+    "notifications"
   ],
   "host_permissions": [
     "http://localhost:8080/*"

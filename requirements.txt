@@ -1,0 +1,8 @@
+# Python Requirements for DDAS File Watcher
+
+# File system monitoring
+watchdog==3.0.0
+
+# HTTP requests to backend
+requests==2.31.0
+

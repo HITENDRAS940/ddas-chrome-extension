@@ -14,6 +14,12 @@ const userIdDisplay = document.getElementById('userId');
 // Set user ID
 userIdDisplay.textContent = USER_ID;
 
+// Add auto-detection status indicator
+const autoDetectIndicator = document.createElement('div');
+autoDetectIndicator.style.cssText = 'background: #e8f5e9; padding: 8px 15px; margin-bottom: 15px; border-radius: 6px; font-size: 12px; color: #2e7d32; display: flex; align-items: center; gap: 8px;';
+autoDetectIndicator.innerHTML = '<span style="font-size: 16px;">🤖</span> <span><strong>Auto-detection:</strong> Active - Downloads are monitored automatically</span>';
+document.querySelector('.content').insertBefore(autoDetectIndicator, document.querySelector('.user-info'));
+
 // Load previous status from storage
 loadStatusHistory();
 
