@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "DDAS - Data Duplication Alert System",
+  "version": "1.0.0",
+  "description": "Detects duplicate file downloads using hash comparison with cloud storage",
+  "permissions": [
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:8080/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
