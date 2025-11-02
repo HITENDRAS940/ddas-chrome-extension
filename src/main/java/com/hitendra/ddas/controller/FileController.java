@@ -2,6 +2,7 @@ package com.hitendra.ddas.controller;
 
 import com.hitendra.ddas.dto.FileListResponse;
 import com.hitendra.ddas.dto.FileUploadResponse;
+import com.hitendra.ddas.service.AuthService;
 import com.hitendra.ddas.service.FileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -20,9 +21,11 @@ import java.util.List;
 public class FileController {
 
     private final FileService fileService;
+    private final AuthService authService;
 
-    public FileController(FileService fileService) {
+    public FileController(FileService fileService, AuthService authService) {
         this.fileService = fileService;
+        this.authService = authService;
     }
 
     /**
@@ -30,11 +33,12 @@ public class FileController {
      * POST /api/files/upload
      */
     @PostMapping("/upload")
-    public ResponseEntity<FileUploadResponse> uploadFile(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam("userId") String userId) {
+    public ResponseEntity<FileUploadResponse> uploadFile(@RequestParam("file") MultipartFile file) {
 
-        log.info("Received file upload request - File: {}, UserId: {}", file.getOriginalFilename(), userId);
+        // Get authenticated username
+        String username = authService.getCurrentUsername();
+
+        log.info("Received file upload request - File: {}, User: {}", file.getOriginalFilename(), username);
 
         // Validate file
         if (file.isEmpty()) {
@@ -42,8 +46,8 @@ public class FileController {
                     .body(new FileUploadResponse(false, "File is empty", null, null, null));
         }
 
-        // Process file and check for duplicates
-        FileUploadResponse response = fileService.processFile(file, userId);
+        // Process file and check for duplicates using authenticated username
+        FileUploadResponse response = fileService.processFile(file, username);
 
         // Return 409 Conflict if duplicate, 201 Created if new file
         HttpStatus status = response.isDuplicate() ? HttpStatus.CONFLICT : HttpStatus.CREATED;
@@ -52,13 +56,14 @@ public class FileController {
     }
 
     /**
-     * Get all files for a user
-     * GET /api/files/all?userId={userId}
+     * Get all files for authenticated user
+     * GET /api/files/all
      */
     @GetMapping("/all")
-    public ResponseEntity<List<FileListResponse>> getAllUserFiles(@RequestParam("userId") String userId) {
-        log.info("Fetching all files for user: {}", userId);
-        List<FileListResponse> files = fileService.getUserFiles(userId);
+    public ResponseEntity<List<FileListResponse>> getAllUserFiles() {
+        String username = authService.getCurrentUsername();
+        log.info("Fetching all files for user: {}", username);
+        List<FileListResponse> files = fileService.getUserFiles(username);
         return ResponseEntity.ok(files);
     }
 

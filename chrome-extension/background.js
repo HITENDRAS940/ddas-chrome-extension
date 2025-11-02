@@ -16,56 +16,79 @@ chrome.downloads.onChanged.addListener(async (downloadDelta) => {
         chrome.downloads.search({ id: downloadDelta.id }, async (downloads) => {
             if (downloads && downloads.length > 0) {
                 const download = downloads[0];
-                await processDownloadedFile(download);
+                await notifyDownloadComplete(download);
             }
         });
     }
 });
 
 /**
- * Process downloaded file automatically
+ * Notify user of download completion and prompt to check for duplicates
  */
-async function processDownloadedFile(download) {
-    console.log('🔍 Processing download:', download.filename);
+async function notifyDownloadComplete(download) {
+    console.log('📥 Download complete:', download.filename);
 
-    try {
-        // Show initial notification
-        chrome.notifications.create({
+    const filename = download.filename.split('/').pop(); // Get just the filename
+
+    // Create notification with button to check for duplicates
+    if (chrome.notifications && chrome.notifications.create) {
+        chrome.notifications.create(download.id.toString(), {
             type: 'basic',
-            iconUrl: chrome.runtime.getURL('icons/icon.svg'),
-            title: 'DDAS - Processing Download',
-            message: `Checking ${download.filename} for duplicates...`,
-            priority: 1
-        });
-
-        // Get file blob from the downloaded file
-        const response = await fetch(download.url);
-        const blob = await response.blob();
-        const file = new File([blob], download.filename);
-
-        // Upload to backend for duplicate detection
-        await uploadFileToBackend(file);
-
-    } catch (error) {
-        console.error('❌ Error processing download:', error);
-
-        // Show error notification
-        chrome.notifications.create({
-            type: 'basic',
-            iconUrl: chrome.runtime.getURL('icons/icon.svg'),
-            title: 'DDAS - Error',
-            message: `Failed to process ${download.filename}. Backend may not be running.`,
-            priority: 2
-        });
-
-        // Store error in history
-        saveToHistory({
-            duplicate: false,
-            message: `Error: ${error.message}`,
-            fileName: download.filename
+            iconUrl: 'icon128.png',
+            title: '🔍 DDAS - File Downloaded',
+            message: `${filename}\n\nClick to check for duplicates`,
+            priority: 2,
+            requireInteraction: true, // Keeps notification visible
+            buttons: [
+                { title: 'Check for Duplicates' }
+            ]
         });
     }
+
+    // Store download info for quick access
+    chrome.storage.local.set({
+        lastDownload: {
+            filename: filename,
+            path: download.filename,
+            timestamp: new Date().toISOString()
+        }
+    });
+
+    // Auto-open popup after 1 second
+    setTimeout(() => {
+        if (chrome.action && chrome.action.openPopup) {
+            chrome.action.openPopup().catch((err) => {
+                console.log('Auto-open popup failed (user may need to click icon):', err);
+            });
+        }
+    }, 1000);
 }
+
+// Listen for notification button clicks
+chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+    if (buttonIndex === 0) {
+        // Open the extension popup
+        if (chrome.action && chrome.action.openPopup) {
+            chrome.action.openPopup().catch(() => {
+                // If popup can't open programmatically, just clear the notification
+                console.log('Please click the DDAS extension icon to check for duplicates');
+            });
+        }
+        // Clear the notification
+        chrome.notifications.clear(notificationId);
+    }
+});
+
+// Listen for notification clicks
+chrome.notifications.onClicked.addListener((notificationId) => {
+    // Open the extension popup when notification is clicked
+    if (chrome.action && chrome.action.openPopup) {
+        chrome.action.openPopup().catch(() => {
+            console.log('Please click the DDAS extension icon');
+        });
+    }
+    chrome.notifications.clear(notificationId);
+});
 
 /**
  * Upload file to backend API for duplicate detection
@@ -92,18 +115,22 @@ async function uploadFileToBackend(file) {
             ? `${file.name} already exists in your storage.`
             : `${file.name} has been stored successfully.`;
 
-        chrome.notifications.create({
-            type: 'basic',
-            iconUrl: chrome.runtime.getURL('icons/icon.svg'),
-            title: notificationTitle,
-            message: notificationMessage,
-            priority: 2
-        });
+        if (chrome.notifications && chrome.notifications.create) {
+            chrome.notifications.create({
+                type: 'basic',
+                iconUrl: 'icon128.png',
+                title: notificationTitle,
+                message: notificationMessage,
+                priority: 2
+            });
+        }
 
         // Save to history
         saveToHistory(result, file.name);
 
         console.log('✅ File processed successfully:', result);
+
+        return result;
 
     } catch (error) {
         console.error('❌ Backend upload failed:', error);
