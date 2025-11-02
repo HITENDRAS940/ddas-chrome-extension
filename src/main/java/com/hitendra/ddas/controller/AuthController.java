@@ -2,6 +2,8 @@ package com.hitendra.ddas.controller;
 
 import com.hitendra.ddas.dto.AuthResponse;
 import com.hitendra.ddas.dto.LoginRequest;
+import com.hitendra.ddas.dto.OtpRequest;
+import com.hitendra.ddas.dto.OtpVerificationRequest;
 import com.hitendra.ddas.dto.SignupRequest;
 import com.hitendra.ddas.service.AuthService;
 import jakarta.validation.Valid;
@@ -32,12 +34,39 @@ public class AuthController {
 
         AuthResponse response = authService.signup(request);
 
-        // If token is present, signup was successful
-        if (response.getToken() != null) {
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } else {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        }
+        // Return 201 Created for successful signup (pending verification)
+        // Return 400 Bad Request for validation errors
+        HttpStatus status = response.getMessage().contains("✅") ? HttpStatus.CREATED : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(response);
+    }
+
+    /**
+     * Email verification endpoint
+     * POST /api/auth/verify-email
+     */
+    @PostMapping("/verify-email")
+    public ResponseEntity<AuthResponse> verifyEmail(@Valid @RequestBody OtpVerificationRequest request) {
+        log.info("Email verification request received for: {}", request.getEmail());
+
+        AuthResponse response = authService.verifyEmail(request.getEmail(), request.getOtp());
+
+        // If token is present, verification was successful
+        HttpStatus status = response.getToken() != null ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(response);
+    }
+
+    /**
+     * Resend OTP endpoint
+     * POST /api/auth/resend-otp
+     */
+    @PostMapping("/resend-otp")
+    public ResponseEntity<AuthResponse> resendOtp(@Valid @RequestBody OtpRequest request) {
+        log.info("Resend OTP request received for: {}", request.getEmail());
+
+        AuthResponse response = authService.resendOtp(request.getEmail());
+
+        HttpStatus status = response.getMessage().contains("✅") ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(response);
     }
 
     /**

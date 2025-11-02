@@ -3,6 +3,7 @@ package com.hitendra.ddas.service;
 import com.hitendra.ddas.dto.AuthResponse;
 import com.hitendra.ddas.dto.LoginRequest;
 import com.hitendra.ddas.dto.SignupRequest;
+import com.hitendra.ddas.entity.OtpVerification;
 import com.hitendra.ddas.entity.User;
 import com.hitendra.ddas.repository.UserRepository;
 import com.hitendra.ddas.security.JwtTokenProvider;
@@ -36,8 +37,14 @@ public class AuthService {
     @Autowired
     private AuthenticationManager authenticationManager;
 
+    @Autowired
+    private OtpService otpService;
+
+    @Autowired
+    private EmailService emailService;
+
     /**
-     * Register a new user
+     * Register a new user (requires email verification)
      */
     public AuthResponse signup(SignupRequest request) {
         // Check if username already exists
@@ -50,28 +57,107 @@ public class AuthService {
             return new AuthResponse("❌ Email already registered!");
         }
 
-        // Create new user
+        // Create new user (inactive until email verification)
         User user = new User();
         user.setUsername(request.getUsername());
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setFullName(request.getFullName());
-        user.setIsActive(true);
+        user.setIsActive(false); // User inactive until email verification
+        user.setIsEmailVerified(false);
 
         userRepository.save(user);
 
-        log.info("New user registered: {}", user.getUsername());
+        // Send email verification OTP
+        boolean otpSent = otpService.generateAndSendOtp(user.getEmail(), OtpVerification.OtpType.EMAIL_VERIFICATION);
 
-        // Generate JWT token
-        String token = tokenProvider.generateToken(user.getUsername());
+        if (!otpSent) {
+            log.error("Failed to send verification email for user: {}", user.getUsername());
+            return new AuthResponse("❌ Failed to send verification email. Please try again.");
+        }
 
-        return new AuthResponse(
-                token,
-                user.getUsername(),
-                user.getEmail(),
-                user.getFullName(),
-                "✅ Account created successfully!"
-        );
+        log.info("New user registered (pending verification): {}", user.getUsername());
+
+        return new AuthResponse("✅ Account created! Please check your email for verification code.");
+    }
+
+    /**
+     * Verify email with OTP
+     */
+    public AuthResponse verifyEmail(String email, String otp) {
+        try {
+            // Find user by email
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Check if already verified
+            if (user.getIsEmailVerified()) {
+                return new AuthResponse("✅ Email already verified!");
+            }
+
+            // Verify OTP
+            boolean otpValid = otpService.verifyOtp(email, otp, OtpVerification.OtpType.EMAIL_VERIFICATION);
+
+            if (!otpValid) {
+                return new AuthResponse("❌ Invalid or expired OTP!");
+            }
+
+            // Mark user as verified and active
+            user.setIsEmailVerified(true);
+            user.setEmailVerifiedAt(LocalDateTime.now());
+            user.setIsActive(true);
+            userRepository.save(user);
+
+            // Send welcome email
+            emailService.sendWelcomeEmail(user.getEmail(), user.getUsername());
+
+            // Generate JWT token
+            String token = tokenProvider.generateToken(user.getUsername());
+
+            log.info("Email verified successfully for user: {}", user.getUsername());
+
+            return new AuthResponse(
+                    token,
+                    user.getUsername(),
+                    user.getEmail(),
+                    user.getFullName(),
+                    "✅ Email verified successfully! Welcome to DDAS!"
+            );
+
+        } catch (Exception e) {
+            log.error("Error verifying email for: {}", email, e);
+            return new AuthResponse("❌ Email verification failed!");
+        }
+    }
+
+    /**
+     * Resend OTP for email verification
+     */
+    public AuthResponse resendOtp(String email) {
+        try {
+            // Find user by email
+            User user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Check if already verified
+            if (user.getIsEmailVerified()) {
+                return new AuthResponse("✅ Email already verified!");
+            }
+
+            // Send new OTP
+            boolean otpSent = otpService.generateAndSendOtp(email, OtpVerification.OtpType.EMAIL_VERIFICATION);
+
+            if (!otpSent) {
+                return new AuthResponse("❌ Failed to send OTP. Please try again later.");
+            }
+
+            log.info("OTP resent successfully for email: {}", email);
+            return new AuthResponse("✅ New verification code sent to your email!");
+
+        } catch (Exception e) {
+            log.error("Error resending OTP for email: {}", email, e);
+            return new AuthResponse("❌ Failed to resend OTP!");
+        }
     }
 
     /**
@@ -93,6 +179,16 @@ public class AuthService {
             User user = userRepository.findByUsername(request.getUsernameOrEmail())
                     .or(() -> userRepository.findByEmail(request.getUsernameOrEmail()))
                     .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Check if email is verified
+            if (!user.getIsEmailVerified()) {
+                return new AuthResponse("❌ Please verify your email first. Check your inbox for verification code.");
+            }
+
+            // Check if user is active
+            if (!user.getIsActive()) {
+                return new AuthResponse("❌ Account is deactivated. Please contact support.");
+            }
 
             // Update last login
             user.setLastLogin(LocalDateTime.now());

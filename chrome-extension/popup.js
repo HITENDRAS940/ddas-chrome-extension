@@ -14,8 +14,12 @@ const loginTab = document.getElementById('loginTab');
 const signupTab = document.getElementById('signupTab');
 const loginForm = document.getElementById('loginForm');
 const signupForm = document.getElementById('signupForm');
+const verificationForm = document.getElementById('verificationForm');
 const loginMessage = document.getElementById('loginMessage');
 const signupMessage = document.getElementById('signupMessage');
+const verificationMessage = document.getElementById('verificationMessage');
+const verificationEmail = document.getElementById('verificationEmail');
+const resendOtpBtn = document.getElementById('resendOtpBtn');
 const userName = document.getElementById('userName');
 const logoutBtn = document.getElementById('logoutBtn');
 
@@ -96,6 +100,10 @@ function setupEventListeners() {
     // Auth forms
     loginForm.addEventListener('submit', handleLogin);
     signupForm.addEventListener('submit', handleSignup);
+    verificationForm.addEventListener('submit', handleEmailVerification);
+
+    // Resend OTP
+    resendOtpBtn.addEventListener('click', handleResendOtp);
 
     // Logout
     logoutBtn.addEventListener('click', handleLogout);
@@ -109,6 +117,9 @@ function setupEventListeners() {
  * Switch between auth tabs
  */
 function switchAuthTab(tab) {
+    // Hide verification form when switching tabs
+    verificationForm.classList.remove('active');
+
     if (tab === 'login') {
         loginTab.classList.add('active');
         signupTab.classList.remove('active');
@@ -161,7 +172,22 @@ async function handleLogin(e) {
             }, 1000);
         } else {
             // Login failed
-            showAuthMessage('loginMessage', result.message || 'Login failed', 'error');
+            const message = result.message || 'Login failed';
+            showAuthMessage('loginMessage', message, 'error');
+
+            // If email not verified, show option to verify
+            if (message.includes('verify your email')) {
+                setTimeout(() => {
+                    const verifyButton = document.createElement('button');
+                    verifyButton.textContent = 'Verify Email';
+                    verifyButton.className = 'auth-btn secondary';
+                    verifyButton.style.marginTop = '10px';
+                    verifyButton.onclick = () => showVerificationForm(loginData.usernameOrEmail);
+
+                    const messageEl = document.getElementById('loginMessage');
+                    messageEl.appendChild(verifyButton);
+                }, 500);
+            }
         }
     } catch (error) {
         console.error('Login error:', error);
@@ -207,16 +233,12 @@ async function handleSignup(e) {
 
         const result = await response.json();
 
-        if (response.ok && result.token) {
-            // Signup successful
-            authToken = result.token;
-            currentUser = result.user;
-            storeAuth(authToken, currentUser);
-            showAuthMessage('signupMessage', 'Account created successfully!', 'success');
+        if (response.ok && result.message.includes('✅')) {
+            // Signup successful, show verification form
+            showAuthMessage('signupMessage', result.message, 'success');
             setTimeout(() => {
-                showAppScreen();
-                loadStatusHistory();
-            }, 1000);
+                showVerificationForm(signupData.email);
+            }, 1500);
         } else {
             // Signup failed
             showAuthMessage('signupMessage', result.message || 'Signup failed', 'error');
@@ -227,6 +249,104 @@ async function handleSignup(e) {
     } finally {
         showAuthLoading('signupBtn', false);
     }
+}
+
+/**
+ * Handle email verification form submission
+ */
+async function handleEmailVerification(e) {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const verificationData = {
+        email: verificationEmail.textContent,
+        otp: formData.get('otp')
+    };
+
+    try {
+        showAuthLoading('verifyBtn', true);
+        clearAuthMessages();
+
+        const response = await fetch(`${AUTH_URL}/verify-email`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(verificationData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.token) {
+            // Verification successful
+            authToken = result.token;
+            currentUser = result.user;
+            storeAuth(authToken, currentUser);
+            showAuthMessage('verificationMessage', result.message, 'success');
+            setTimeout(() => {
+                showAppScreen();
+                loadStatusHistory();
+            }, 1500);
+        } else {
+            // Verification failed
+            showAuthMessage('verificationMessage', result.message || 'Verification failed', 'error');
+        }
+    } catch (error) {
+        console.error('Verification error:', error);
+        showAuthMessage('verificationMessage', 'Network error. Please check if the server is running.', 'error');
+    } finally {
+        showAuthLoading('verifyBtn', false);
+    }
+}
+
+/**
+ * Handle resend OTP
+ */
+async function handleResendOtp() {
+    const email = verificationEmail.textContent;
+
+    try {
+        showAuthLoading('resendOtpBtn', true);
+        clearAuthMessages();
+
+        const response = await fetch(`${AUTH_URL}/resend-otp`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.message.includes('✅')) {
+            showAuthMessage('verificationMessage', result.message, 'success');
+        } else {
+            showAuthMessage('verificationMessage', result.message || 'Failed to resend OTP', 'error');
+        }
+    } catch (error) {
+        console.error('Resend OTP error:', error);
+        showAuthMessage('verificationMessage', 'Network error. Please try again.', 'error');
+    } finally {
+        showAuthLoading('resendOtpBtn', false);
+    }
+}
+
+/**
+ * Show verification form
+ */
+function showVerificationForm(email) {
+    // Hide other forms
+    loginForm.classList.remove('active');
+    signupForm.classList.remove('active');
+    verificationForm.classList.add('active');
+
+    // Set email in verification form
+    verificationEmail.textContent = email;
+
+    // Clear form
+    document.getElementById('otpCode').value = '';
+    clearAuthMessages();
 }
 
 /**
@@ -275,7 +395,11 @@ function showAuthMessage(elementId, message, type) {
  */
 function clearAuthMessages() {
     loginMessage.className = 'auth-message';
+    loginMessage.innerHTML = '';
     signupMessage.className = 'auth-message';
+    signupMessage.innerHTML = '';
+    verificationMessage.className = 'auth-message';
+    verificationMessage.innerHTML = '';
 }
 
 /**
@@ -293,6 +417,8 @@ function showAuthLoading(buttonId, loading) {
 function clearAuthForms() {
     loginForm.reset();
     signupForm.reset();
+    verificationForm.reset();
+    verificationForm.classList.remove('active');
     clearAuthMessages();
 }
 
