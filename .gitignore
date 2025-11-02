@@ -21,9 +21,8 @@ mvnw.cmd
 *.log
 logs/
 
-# Application Properties (if containing sensitive data)
-# Uncomment if you add passwords/keys to application.properties
-# src/main/resources/application.properties
+# Application Properties (contains sensitive data like email credentials and DB passwords)
+src/main/resources/application.properties
 
 # Chrome Extension (packaged)
 *.crx

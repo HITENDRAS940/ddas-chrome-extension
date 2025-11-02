@@ -3,8 +3,7 @@
 
 console.log('🚀 DDAS Background Service Worker Started - Auto-monitoring enabled');
 
-const API_BASE_URL = 'http://localhost:8080/api/files';
-const USER_ID = 'user_demo_001'; // In production, this would come from authentication
+const API_BASE_URL = 'http://localhost:8081/api/files';
 
 // Listen for download completion
 chrome.downloads.onChanged.addListener(async (downloadDelta) => {
@@ -34,7 +33,6 @@ async function notifyDownloadComplete(download) {
     if (chrome.notifications && chrome.notifications.create) {
         chrome.notifications.create(download.id.toString(), {
             type: 'basic',
-            iconUrl: 'icon128.png',
             title: '🔍 DDAS - File Downloaded',
             message: `${filename}\n\nClick to check for duplicates`,
             priority: 2,
@@ -94,15 +92,34 @@ chrome.notifications.onClicked.addListener((notificationId) => {
  * Upload file to backend API for duplicate detection
  */
 async function uploadFileToBackend(file) {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('userId', USER_ID);
-
     try {
+        // Get stored auth token
+        const authData = await new Promise((resolve) => {
+            chrome.storage.local.get(['authToken'], (data) => {
+                resolve(data);
+            });
+        });
+
+        if (!authData.authToken) {
+            console.log('No auth token found, user needs to login first');
+            return null;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
         const response = await fetch(`${API_BASE_URL}/upload`, {
             method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authData.authToken}`
+            },
             body: formData
         });
+
+        if (response.status === 401) {
+            console.log('Auth token expired, user needs to login again');
+            return null;
+        }
 
         const result = await response.json();
 
@@ -118,7 +135,6 @@ async function uploadFileToBackend(file) {
         if (chrome.notifications && chrome.notifications.create) {
             chrome.notifications.create({
                 type: 'basic',
-                iconUrl: 'icon128.png',
                 title: notificationTitle,
                 message: notificationMessage,
                 priority: 2

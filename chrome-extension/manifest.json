@@ -9,12 +9,13 @@
     "notifications"
   ],
   "host_permissions": [
-    "http://localhost:8080/*"
+    "http://localhost:8081/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "DDAS - Duplicate Detection"
   }
 }
