@@ -135,6 +135,32 @@ def process_downloaded_file(file_path, auth_token):
                     "file_hash": file_hash,
                     "message": f"File '{filename}' uploaded successfully"
                 }
+            elif response.status_code == 409:
+                # Handle duplicate file conflict
+                app.logger.info("Duplicate file detected during upload (409 Conflict)")
+                try:
+                    error_data = response.json()
+                    existing_filename = error_data.get('existingFileName', error_data.get('filename', 'unknown file'))
+                    app.logger.info(f"Existing file name: {existing_filename}")
+                    return {
+                        "success": True,
+                        "duplicate": True,
+                        "filename": filename,
+                        "original_filename": existing_filename,
+                        "file_hash": file_hash,
+                        "message": f"File '{filename}' already exists as '{existing_filename}'"
+                    }
+                except (ValueError, KeyError) as e:
+                    app.logger.warning(f"Could not parse 409 response: {e}")
+                    # Fallback to generic duplicate message
+                    return {
+                        "success": True,
+                        "duplicate": True,
+                        "filename": filename,
+                        "original_filename": "existing file",
+                        "file_hash": file_hash,
+                        "message": f"File '{filename}' already exists in the system"
+                    }
             else:
                 app.logger.error(f"Upload failed: HTTP {response.status_code}")
                 return {"success": False, "error": f"Upload failed: HTTP {response.status_code}"}
