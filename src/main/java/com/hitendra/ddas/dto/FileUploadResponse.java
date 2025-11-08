@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 /**
  * Response DTO for file upload endpoint
  */
@@ -17,14 +19,16 @@ public class FileUploadResponse {
     private String fileName;
     private String fileHash;
     private String existingFileUrl; // If duplicate, URL of existing file
+    private LocalDateTime uploadDate; // When the file was originally uploaded
 
-    public static FileUploadResponse duplicate(String fileName, String fileHash, String existingFileUrl) {
+    public static FileUploadResponse duplicate(String fileName, String fileHash, String existingFileUrl, LocalDateTime uploadDate) {
         return new FileUploadResponse(
                 true,
                 "⚠️ Duplicate file detected! This file already exists.",
                 fileName,
                 fileHash,
-                existingFileUrl
+                existingFileUrl,
+                uploadDate
         );
     }
 
@@ -34,7 +38,8 @@ public class FileUploadResponse {
                 "✅ File stored successfully!",
                 fileName,
                 fileHash,
-                s3Url
+                s3Url,
+                LocalDateTime.now()
         );
     }
 }

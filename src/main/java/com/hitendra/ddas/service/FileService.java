@@ -56,7 +56,8 @@ public class FileService {
             return FileUploadResponse.duplicate(
                     file.getOriginalFilename(),
                     fileHash,
-                    existing.getHashFileUrl()
+                    existing.getHashFileUrl(),
+                    existing.getCreatedAt()
             );
         }
 

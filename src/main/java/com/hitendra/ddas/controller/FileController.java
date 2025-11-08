@@ -43,7 +43,7 @@ public class FileController {
         // Validate file
         if (file.isEmpty()) {
             return ResponseEntity.badRequest()
-                    .body(new FileUploadResponse(false, "File is empty", null, null, null));
+                    .body(new FileUploadResponse(false, "File is empty", null, null, null, null));
         }
 
         // Process file and check for duplicates using authenticated username
