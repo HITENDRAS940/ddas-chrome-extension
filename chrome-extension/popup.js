@@ -487,6 +487,23 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 /**
+ * Check if pending section should be hidden
+ */
+function checkAndHidePendingSection() {
+    try {
+        const remainingCards = document.querySelectorAll('.pending-card:not(.skipped-card), .processing-card');
+        console.log(`🔍 Checking pending section: ${remainingCards.length} remaining cards`);
+
+        if (remainingCards.length === 0) {
+            pendingSection.style.display = 'none';
+            console.log('📂 No more pending downloads - hiding section');
+        }
+    } catch (error) {
+        console.error('❌ Error checking pending section:', error);
+    }
+}
+
+/**
  * Load pending downloads
  */
 async function loadPendingDownloads() {
@@ -593,33 +610,115 @@ async function handleFileConsent(storageKey, accepted) {
                 console.log('❌ No auth token - showing auth screen');
                 showMessage(loginMessage, 'Please login first to check files', 'error');
                 showAuthScreen();
+
+                // Clean up pending file even if not authenticated
+                await chrome.storage.local.remove([storageKey]);
                 return;
             }
 
             // Show processing card
             showProcessingCard(fileData, storageKey);
 
-            // Process file
+            // Process file (this will clean up the pending file)
             await processFileWithServer(fileData, storageKey);
         } else {
             console.log('❌ User skipped file processing');
 
-            // Add to history as skipped
-            await addToHistory({
-                filename: fileData.filename,
-                success: false,
-                skipped: true,
-                message: 'File processing skipped by user',
-                timestamp: Date.now()
-            });
+            try {
+                // Show visual feedback for skip action
+                console.log('📺 Showing skip feedback...');
+                showSkipFeedback(fileData, storageKey);
+
+                // Add to history as skipped
+                console.log('📝 Adding to history...');
+                await addToHistory({
+                    filename: fileData.filename,
+                    success: false,
+                    skipped: true,
+                    message: 'File processing skipped by user',
+                    timestamp: Date.now()
+                });
+                console.log('✅ Added to history successfully');
+
+                // Clean up pending file immediately
+                console.log('🗑️ Cleaning up storage...');
+                await new Promise((resolve, reject) => {
+                    chrome.storage.local.remove([storageKey], () => {
+                        if (chrome.runtime.lastError) {
+                            reject(new Error(chrome.runtime.lastError.message));
+                        } else {
+                            resolve();
+                        }
+                    });
+                });
+                console.log('✅ Storage cleaned up successfully');
+
+                // Remove the pending card from UI
+                setTimeout(() => {
+                    console.log('🧹 Cleaning up UI...');
+                    const pendingCard = document.getElementById(`pending-${storageKey}`);
+                    if (pendingCard) {
+                        pendingCard.remove();
+                        console.log('✅ Pending card removed');
+                    }
+
+                    // Check if there are no more pending items
+                    checkAndHidePendingSection();
+                }, 1500); // Show feedback for 1.5 seconds then remove
+
+                console.log('✅ Skip processing completed successfully');
+            } catch (skipError) {
+                console.error('❌ Error during skip processing:', skipError);
+                showError(`Error skipping file: ${skipError.message}`);
+            }
         }
 
-        // Clean up pending file
-        await chrome.storage.local.remove([storageKey]);
-
     } catch (error) {
-        console.error('Error handling file consent:', error);
-        showError(`Error processing file: ${error.message}`);
+        console.error('❌ Error handling file consent:', error);
+        console.error('❌ Error details:', {
+            message: error.message,
+            stack: error.stack,
+            storageKey: storageKey,
+            accepted: accepted
+        });
+
+        // Show user-friendly error message
+        const errorMessage = error.message || 'Unknown error occurred';
+        showError(`Error ${accepted ? 'processing' : 'skipping'} file: ${errorMessage}`);
+
+        // Try to clean up storage even if there's an error
+        try {
+            await chrome.storage.local.remove([storageKey]);
+            console.log('✅ Storage cleaned up after error');
+        } catch (cleanupError) {
+            console.error('❌ Failed to cleanup storage after error:', cleanupError);
+        }
+    }
+}
+
+/**
+ * Show skip feedback
+ */
+function showSkipFeedback(fileData, storageKey) {
+    try {
+        const pendingCard = document.getElementById(`pending-${storageKey}`);
+        if (pendingCard) {
+            pendingCard.className = 'pending-card skipped-card';
+            pendingCard.innerHTML = `
+                <div class="pending-title">
+                    ✗ ${fileData.filename} - Skipped
+                </div>
+                <div class="pending-message">
+                    File processing was skipped by user.<br>
+                    Added to Recent Activity.
+                </div>
+            `;
+            console.log('✅ Skip feedback UI updated successfully');
+        } else {
+            console.warn('⚠️ Pending card not found for storageKey:', storageKey);
+        }
+    } catch (error) {
+        console.error('❌ Error showing skip feedback:', error);
     }
 }
 
@@ -720,12 +819,14 @@ async function processFileWithServer(fileData, storageKey) {
                 showSuccess(`✅ ${fileData.filename} processed successfully - no duplicates found`);
             }
 
-            // Remove processing card after showing result
-            setTimeout(() => {
+            // Clean up pending storage and remove processing card
+            setTimeout(async () => {
+                await chrome.storage.local.remove([storageKey]);
                 const processingCard = document.getElementById(`pending-${storageKey}`);
                 if (processingCard) {
                     processingCard.remove();
                 }
+                checkAndHidePendingSection();
             }, 2000);
         }, 500);
 
@@ -742,12 +843,14 @@ async function processFileWithServer(fileData, storageKey) {
 
         showError(`❌ Processing failed: ${error.message}`);
 
-        // Remove processing card
-        setTimeout(() => {
+        // Clean up pending storage and remove processing card
+        setTimeout(async () => {
+            await chrome.storage.local.remove([storageKey]);
             const processingCard = document.getElementById(`pending-${storageKey}`);
             if (processingCard) {
                 processingCard.remove();
             }
+            checkAndHidePendingSection();
         }, 2000);
     }
 }
@@ -801,16 +904,28 @@ async function sendFileToServer(filePath, authToken) {
  * Add item to history
  */
 async function addToHistory(item) {
-    chrome.storage.local.get(['fileHistory'], (data) => {
-        const history = data.fileHistory || [];
-        history.unshift(item); // Add to beginning
+    return new Promise((resolve, reject) => {
+        try {
+            chrome.storage.local.get(['fileHistory'], (data) => {
+                const history = data.fileHistory || [];
+                history.unshift(item); // Add to beginning
 
-        // Keep only last 20 items
-        if (history.length > 20) {
-            history.splice(20);
+                // Keep only last 20 items
+                if (history.length > 20) {
+                    history.splice(20);
+                }
+
+                chrome.storage.local.set({ fileHistory: history }, () => {
+                    if (chrome.runtime.lastError) {
+                        reject(new Error(chrome.runtime.lastError.message));
+                    } else {
+                        resolve();
+                    }
+                });
+            });
+        } catch (error) {
+            reject(error);
         }
-
-        chrome.storage.local.set({ fileHistory: history });
     });
 }
 
@@ -834,24 +949,67 @@ function showError(message) {
 // Event listeners are now properly attached to buttons in createPendingCard function
 
 /**
- * Test function to create a fake pending download
+ * Test function to create fake pending downloads
  */
-window.ddas_test_pending = async function() {
-    console.log('🧪 Creating test pending download...');
+window.ddas_test_pending = async function(count = 1) {
+    console.log(`🧪 Creating ${count} test pending download(s)...`);
 
-    const testPendingData = {
-        filename: 'test-file.pdf',
-        filepath: '/Users/test/Downloads/test-file.pdf',
-        authToken: 'test-token-123',
+    const testFiles = [
+        'test-document.pdf',
+        'sample-image.jpg',
+        'data-file.xlsx',
+        'presentation.pptx',
+        'archive.zip'
+    ];
+
+    for (let i = 0; i < count; i++) {
+        const filename = testFiles[i % testFiles.length];
+        const testPendingData = {
+            filename: filename,
+            filepath: `/Users/test/Downloads/${filename}`,
+            authToken: authToken || 'test-token-123',
+            timestamp: Date.now() - (i * 1000), // Stagger timestamps
+            downloadId: 999 + i
+        };
+
+        await chrome.storage.local.set({
+            [`pending_${999 + i}`]: testPendingData
+        });
+    }
+
+    console.log(`✅ ${count} test pending download(s) created. Reloading pending downloads...`);
+    loadPendingDownloads();
+};
+
+// Test skip functionality specifically
+window.ddas_test_skip = async function() {
+    console.log('🧪 Testing skip functionality...');
+    await ddas_test_pending(1);
+    console.log('✅ Created 1 test file. Try skipping it to test the functionality.');
+};
+
+// Debug function to manually test skip without UI
+window.ddas_debug_skip = async function() {
+    console.log('🧪 Debug testing skip function directly...');
+
+    // Create a test file first
+    const testData = {
+        filename: 'debug-test.pdf',
+        filepath: '/Users/test/Downloads/debug-test.pdf',
+        authToken: authToken || 'test-token',
         timestamp: Date.now(),
-        downloadId: 999
+        downloadId: 888
     };
 
-    await chrome.storage.local.set({
-        'pending_999': testPendingData
-    });
+    await chrome.storage.local.set({ 'pending_888': testData });
+    console.log('✅ Test file created');
 
-    console.log('✅ Test pending download created. Reload pending downloads...');
-    loadPendingDownloads();
+    // Now try to skip it
+    try {
+        await handleFileConsent('pending_888', false);
+        console.log('✅ Skip test completed successfully');
+    } catch (error) {
+        console.error('❌ Skip test failed:', error);
+    }
 };
 
