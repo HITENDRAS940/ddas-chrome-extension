@@ -298,6 +298,16 @@
             background: #fff9e6;
         }
 
+        .status-card.duplicate-deleted {
+            border-left-color: #28a745;
+            background: #e6f7e6;
+        }
+
+        .status-card.duplicate-kept {
+            border-left-color: #17a2b8;
+            background: #e6f3ff;
+        }
+
         .status-card.error {
             border-left-color: #dc3545;
             background: #ffe6e6;
@@ -485,6 +495,124 @@
             color: #999;
             border-top: 1px solid #eee;
         }
+
+        /* Duplicate Dialog Styles */
+        .duplicate-dialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .duplicate-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        .duplicate-content {
+            position: relative;
+            background: white;
+            border-radius: 12px;
+            width: 350px;
+            max-width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .duplicate-header {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 12px 12px 0 0;
+            text-align: center;
+        }
+
+        .duplicate-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .duplicate-body {
+            padding: 20px;
+            color: #333;
+        }
+
+        .duplicate-body p {
+            margin: 8px 0;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .duplicate-body span {
+            font-weight: 600;
+            color: #667eea;
+            word-break: break-all;
+        }
+
+        .duplicate-actions {
+            padding: 0 20px 20px;
+            display: flex;
+            gap: 10px;
+            flex-direction: column;
+        }
+
+        .duplicate-btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .duplicate-btn.delete {
+            background: #f44336;
+            color: white;
+        }
+
+        .duplicate-btn.delete:hover {
+            background: #d32f2f;
+            transform: translateY(-2px);
+        }
+
+        .duplicate-btn.keep {
+            background: #2196F3;
+            color: white;
+        }
+
+        .duplicate-btn.keep:hover {
+            background: #1976D2;
+            transform: translateY(-2px);
+        }
+
+        .duplicate-btn:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -588,6 +716,29 @@
 
         <div class="footer">
             Made by Hitendra & Dhruv
+        </div>
+    </div>
+
+    <!-- Duplicate File Action Dialog -->
+    <div class="duplicate-dialog" id="duplicateDialog" style="display: none;">
+        <div class="duplicate-overlay"></div>
+        <div class="duplicate-content">
+            <div class="duplicate-header">
+                <h3>⚠️ Duplicate File Detected</h3>
+            </div>
+            <div class="duplicate-body">
+                <p><strong>File:</strong> <span id="duplicateFileName"></span></p>
+                <p><strong>Already exists as:</strong> <span id="duplicateOriginalName"></span></p>
+                <p style="margin-top: 15px;">What would you like to do with the duplicate file in Downloads?</p>
+            </div>
+            <div class="duplicate-actions">
+                <button class="duplicate-btn delete" id="deleteDuplicateBtn">
+                    🗑️ Delete from Downloads
+                </button>
+                <button class="duplicate-btn keep" id="keepDuplicateBtn">
+                    📁 Keep in Downloads
+                </button>
+            </div>
         </div>
     </div>
 

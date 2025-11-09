@@ -36,6 +36,60 @@ def health_check():
         "timestamp": datetime.now().isoformat()
     })
 
+@app.route('/delete-duplicate', methods=['POST'])
+def delete_duplicate_file():
+    """
+    Delete a duplicate file from the downloads folder
+    Expects JSON: {"path": "/path/to/file", "auth_token": "jwt_token"}
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+
+        file_path = data.get('path')
+        auth_token = data.get('auth_token')
+
+        app.logger.info(f"Delete duplicate file request: {file_path}")
+
+        # Validate inputs
+        if not file_path:
+            return jsonify({"success": False, "error": "File path is required"}), 400
+
+        if not auth_token:
+            return jsonify({"success": False, "error": "Authentication token is required"}), 400
+
+        # Check if file exists
+        if not os.path.exists(file_path):
+            app.logger.warning(f"File already deleted or not found: {file_path}")
+            return jsonify({"success": True, "message": "File already deleted or not found"})
+
+        # Safety check - only delete files from Downloads folder
+        downloads_folder = os.path.expanduser("~/Downloads")
+        abs_file_path = os.path.abspath(file_path)
+        abs_downloads_path = os.path.abspath(downloads_folder)
+
+        if not abs_file_path.startswith(abs_downloads_path):
+            app.logger.error(f"Security violation: Attempt to delete file outside Downloads folder: {file_path}")
+            return jsonify({"success": False, "error": "Can only delete files from Downloads folder"}), 403
+
+        # Delete the file
+        try:
+            os.remove(file_path)
+            app.logger.info(f"Successfully deleted duplicate file: {file_path}")
+
+            return jsonify({
+                "success": True,
+                "message": f"Duplicate file '{os.path.basename(file_path)}' deleted successfully"
+            })
+        except OSError as e:
+            app.logger.error(f"Failed to delete file {file_path}: {e}")
+            return jsonify({"success": False, "error": f"Failed to delete file: {str(e)}"}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error in delete duplicate request: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/process', methods=['POST'])
 def process_file():
     """

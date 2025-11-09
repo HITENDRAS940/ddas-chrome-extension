@@ -446,7 +446,13 @@ function createHistoryCard(item) {
     card.className = 'status-card';
 
     if (item.duplicate) {
-        card.classList.add('duplicate');
+        if (item.deleted === true) {
+            card.classList.add('duplicate-deleted');
+        } else if (item.deleted === false) {
+            card.classList.add('duplicate-kept');
+        } else {
+            card.classList.add('duplicate');
+        }
     } else if (item.success) {
         card.classList.add('success');
     } else if (item.skipped) {
@@ -458,9 +464,20 @@ function createHistoryCard(item) {
     let icon, title, message;
 
     if (item.duplicate) {
-        icon = '⚠️';
-        title = 'Duplicate Detected';
-        message = `File: ${item.filename}<br>Original: ${item.original_filename}`;
+        if (item.deleted === true) {
+            icon = '🗑️';
+            title = 'Duplicate Deleted';
+            message = `File: ${item.filename}<br>Deleted from Downloads<br>Original: ${item.original_filename}`;
+        } else if (item.deleted === false) {
+            icon = '📁';
+            title = 'Duplicate Kept';
+            message = `File: ${item.filename}<br>Kept in Downloads<br>Original: ${item.original_filename}`;
+        } else {
+            // Fallback for old duplicate entries
+            icon = '⚠️';
+            title = 'Duplicate Detected';
+            message = `File: ${item.filename}<br>Original: ${item.original_filename}`;
+        }
     } else if (item.success) {
         icon = '✅';
         title = 'File Processed';
@@ -863,20 +880,20 @@ async function processFileWithServer(fileData, storageKey) {
         // Show result notification
         setTimeout(() => {
             if (result.duplicate) {
-                showError(`⚠️ Duplicate detected: ${fileData.filename} already exists as ${result.original_filename}`);
+                // Show duplicate dialog for user choice
+                showDuplicateDialog(fileData, result, storageKey);
             } else {
                 showSuccess(`✅ ${fileData.filename} processed successfully - no duplicates found`);
+                // Clean up for non-duplicate files
+                setTimeout(async () => {
+                    await chrome.storage.local.remove([storageKey]);
+                    const processingCard = document.getElementById(`pending-${storageKey}`);
+                    if (processingCard) {
+                        processingCard.remove();
+                    }
+                    checkAndHidePendingSection();
+                }, 2000);
             }
-
-            // Clean up pending storage and remove processing card
-            setTimeout(async () => {
-                await chrome.storage.local.remove([storageKey]);
-                const processingCard = document.getElementById(`pending-${storageKey}`);
-                if (processingCard) {
-                    processingCard.remove();
-                }
-                checkAndHidePendingSection();
-            }, 2000);
         }, 500);
 
     } catch (error) {
@@ -996,6 +1013,155 @@ function showError(message) {
 }
 
 // Event listeners are now properly attached to buttons in createPendingCard function
+
+/**
+ * Show duplicate file dialog
+ */
+function showDuplicateDialog(fileData, result, storageKey) {
+    const dialog = document.getElementById('duplicateDialog');
+    const fileNameSpan = document.getElementById('duplicateFileName');
+    const originalNameSpan = document.getElementById('duplicateOriginalName');
+    const deleteBtn = document.getElementById('deleteDuplicateBtn');
+    const keepBtn = document.getElementById('keepDuplicateBtn');
+
+    // Set dialog content
+    fileNameSpan.textContent = fileData.filename;
+    originalNameSpan.textContent = result.original_filename;
+
+    // Remove existing event listeners
+    const newDeleteBtn = deleteBtn.cloneNode(true);
+    const newKeepBtn = keepBtn.cloneNode(true);
+    deleteBtn.parentNode.replaceChild(newDeleteBtn, deleteBtn);
+    keepBtn.parentNode.replaceChild(newKeepBtn, keepBtn);
+
+    // Add event listeners for the buttons
+    newDeleteBtn.addEventListener('click', () => handleDuplicateAction('delete', fileData, result, storageKey));
+    newKeepBtn.addEventListener('click', () => handleDuplicateAction('keep', fileData, result, storageKey));
+
+    // Add click outside to close functionality
+    const overlay = dialog.querySelector('.duplicate-overlay');
+    overlay.addEventListener('click', () => {
+        // If user closes dialog, treat as "keep" action
+        handleDuplicateAction('keep', fileData, result, storageKey);
+    });
+
+    // Show dialog
+    dialog.style.display = 'flex';
+}
+
+/**
+ * Hide duplicate dialog
+ */
+function hideDuplicateDialog() {
+    const dialog = document.getElementById('duplicateDialog');
+    dialog.style.display = 'none';
+}
+
+/**
+ * Handle duplicate file action (delete or keep)
+ */
+async function handleDuplicateAction(action, fileData, result, storageKey) {
+    try {
+        console.log(`🔄 Handling duplicate action: ${action} for file: ${fileData.filename}`);
+
+        // Hide dialog immediately
+        hideDuplicateDialog();
+
+        if (action === 'delete') {
+            // Show processing feedback
+            showSuccess('🗑️ Deleting duplicate file from Downloads...');
+
+            // Call server to delete the file
+            const deleteResult = await deleteDuplicateFile(fileData.filepath, fileData.authToken);
+
+            if (deleteResult.success) {
+                showSuccess(`✅ Duplicate file deleted: ${fileData.filename}`);
+
+                // Add to history as deleted duplicate
+                await addToHistory({
+                    filename: fileData.filename,
+                    success: true,
+                    duplicate: true,
+                    deleted: true,
+                    original_filename: result.original_filename,
+                    message: `Duplicate file deleted from Downloads. Original: ${result.original_filename}`,
+                    timestamp: Date.now(),
+                    response: result
+                });
+            } else {
+                throw new Error(deleteResult.error || 'Failed to delete file');
+            }
+        } else {
+            // Keep file - just add to history
+            showSuccess(`📁 Keeping duplicate file in Downloads: ${fileData.filename}`);
+
+            await addToHistory({
+                filename: fileData.filename,
+                success: true,
+                duplicate: true,
+                deleted: false,
+                original_filename: result.original_filename,
+                message: `Duplicate file kept in Downloads. Original: ${result.original_filename}`,
+                timestamp: Date.now(),
+                response: result
+            });
+        }
+
+        // Clean up pending storage and remove processing card
+        setTimeout(async () => {
+            await chrome.storage.local.remove([storageKey]);
+            const processingCard = document.getElementById(`pending-${storageKey}`);
+            if (processingCard) {
+                processingCard.remove();
+            }
+            checkAndHidePendingSection();
+        }, 2000);
+
+    } catch (error) {
+        console.error('❌ Error handling duplicate action:', error);
+        showError(`❌ Error ${action === 'delete' ? 'deleting' : 'processing'} file: ${error.message}`);
+
+        // Still clean up in case of error
+        setTimeout(async () => {
+            await chrome.storage.local.remove([storageKey]);
+            const processingCard = document.getElementById(`pending-${storageKey}`);
+            if (processingCard) {
+                processingCard.remove();
+            }
+            checkAndHidePendingSection();
+        }, 3000);
+    }
+}
+
+/**
+ * Delete duplicate file via server
+ */
+async function deleteDuplicateFile(filePath, authToken) {
+    try {
+        const response = await fetch('http://localhost:5001/delete-duplicate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                path: filePath,
+                auth_token: authToken
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Server error (${response.status}): ${errorText}`);
+        }
+
+        const result = await response.json();
+        return result;
+
+    } catch (error) {
+        console.error('❌ Delete request failed:', error);
+        throw error;
+    }
+}
 
 /**
  * Test function to create fake pending downloads
