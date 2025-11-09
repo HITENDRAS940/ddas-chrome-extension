@@ -449,19 +449,29 @@ function createHistoryCard(item) {
         card.classList.add('duplicate');
     } else if (item.success) {
         card.classList.add('success');
+    } else if (item.skipped) {
+        card.classList.add('skipped');
     } else {
         card.classList.add('error');
     }
 
-    const icon = item.duplicate ? '⚠️' : item.success ? '✅' : '❌';
-    const title = item.duplicate ? 'Duplicate Detected' : item.success ? 'File Processed' : 'Error';
+    let icon, title, message;
 
-    let message = '';
     if (item.duplicate) {
+        icon = '⚠️';
+        title = 'Duplicate Detected';
         message = `File: ${item.filename}<br>Original: ${item.original_filename}`;
     } else if (item.success) {
+        icon = '✅';
+        title = 'File Processed';
         message = `File: ${item.filename}<br>No duplicates found`;
+    } else if (item.skipped) {
+        icon = '⏭️';
+        title = 'File Skipped';
+        message = `File: ${item.filename}<br>${item.message || 'Processing skipped by user'}`;
     } else {
+        icon = '❌';
+        title = 'Error';
         message = `Error: ${item.error || 'Unknown error'}`;
     }
 
@@ -669,7 +679,18 @@ async function handleFileConsent(storageKey, accepted) {
                 console.log('✅ Skip processing completed successfully');
             } catch (skipError) {
                 console.error('❌ Error during skip processing:', skipError);
-                showError(`Error skipping file: ${skipError.message}`);
+                // Don't show error to user for skip failures - just log it
+                // Still try to clean up storage if possible
+                try {
+                    await chrome.storage.local.remove([storageKey]);
+                    const pendingCard = document.getElementById(`pending-${storageKey}`);
+                    if (pendingCard) {
+                        pendingCard.remove();
+                    }
+                    checkAndHidePendingSection();
+                } catch (cleanupError) {
+                    console.error('❌ Failed to cleanup after skip error:', cleanupError);
+                }
             }
         }
 
@@ -682,14 +703,42 @@ async function handleFileConsent(storageKey, accepted) {
             accepted: accepted
         });
 
-        // Show user-friendly error message
-        const errorMessage = error.message || 'Unknown error occurred';
-        showError(`Error ${accepted ? 'processing' : 'skipping'} file: ${errorMessage}`);
+        // Only show error in UI for processing failures, not skip failures
+        if (accepted) {
+            const errorMessage = error.message || 'Unknown error occurred';
+            showError(`Error processing file: ${errorMessage}`);
+
+            // Add processing error to history
+            try {
+                const data = await chrome.storage.local.get([storageKey]);
+                const fileData = data[storageKey];
+                if (fileData) {
+                    await addToHistory({
+                        filename: fileData.filename,
+                        success: false,
+                        error: errorMessage,
+                        timestamp: Date.now()
+                    });
+                }
+            } catch (historyError) {
+                console.error('❌ Failed to add error to history:', historyError);
+            }
+        } else {
+            // For skip failures, just log and don't bother the user
+            console.log('❌ Skip operation failed, cleaning up silently');
+        }
 
         // Try to clean up storage even if there's an error
         try {
             await chrome.storage.local.remove([storageKey]);
             console.log('✅ Storage cleaned up after error');
+
+            // Clean up UI
+            const pendingCard = document.getElementById(`pending-${storageKey}`);
+            if (pendingCard) {
+                pendingCard.remove();
+            }
+            checkAndHidePendingSection();
         } catch (cleanupError) {
             console.error('❌ Failed to cleanup storage after error:', cleanupError);
         }

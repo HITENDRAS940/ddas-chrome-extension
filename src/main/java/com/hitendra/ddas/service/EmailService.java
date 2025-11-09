@@ -52,7 +52,7 @@ public class EmailService {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(fromEmail);
             message.setTo(toEmail);
-            message.setSubject("Welcome to DDAS - Duplicate Detection & Archive System");
+            message.setSubject("Welcome to DDAS - Duplicate Detection & Alert System");
 
             String emailBody = buildWelcomeEmailBody(username);
             message.setText(emailBody);
@@ -94,7 +94,7 @@ public class EmailService {
         return String.format("""
             Dear %s,
             
-            Welcome to DDAS (Duplicate Detection & Archive System)!
+            Welcome to DDAS (Duplicate Detection & Alert System)!
             
             Your email has been successfully verified and your account is now active.
             You can now start using our Chrome extension to detect duplicate files and manage your downloads.
@@ -107,8 +107,7 @@ public class EmailService {
             
             Thank you for choosing DDAS!
             
-            Best regards,
-            DDAS Team
+            Best regards
             """, username);
     }
 }
