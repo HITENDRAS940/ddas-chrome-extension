@@ -57,6 +57,7 @@ public class FileService {
                     file.getOriginalFilename(),
                     fileHash,
                     existing.getHashFileUrl(),
+                    existing.getOriginalFileName(), // Pass the existing filename
                     existing.getCreatedAt()
             );
         }
@@ -97,5 +98,22 @@ public class FileService {
                         record.getCreatedAt()
                 ))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Check if a file hash already exists for a specific user
+     */
+    public boolean checkHashExists(String userId, String fileHash) {
+        log.info("Checking if hash {} exists for user: {}", fileHash, userId);
+        return fileRecordRepository.findByUserIdAndFileHash(userId, fileHash).isPresent();
+    }
+
+    /**
+     * Get filename by hash for a specific user
+     */
+    public String getFileNameByHash(String userId, String fileHash) {
+        log.info("Getting filename for hash {} and user: {}", fileHash, userId);
+        Optional<FileRecord> record = fileRecordRepository.findByUserIdAndFileHash(userId, fileHash);
+        return record.map(FileRecord::getOriginalFileName).orElse("unknown file");
     }
 }

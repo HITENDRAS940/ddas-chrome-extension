@@ -19,15 +19,17 @@ public class FileUploadResponse {
     private String fileName;
     private String fileHash;
     private String existingFileUrl; // If duplicate, URL of existing file
+    private String existingFileName; // If duplicate, original filename of existing file
     private LocalDateTime uploadDate; // When the file was originally uploaded
 
-    public static FileUploadResponse duplicate(String fileName, String fileHash, String existingFileUrl, LocalDateTime uploadDate) {
+    public static FileUploadResponse duplicate(String fileName, String fileHash, String existingFileUrl, String existingFileName, LocalDateTime uploadDate) {
         return new FileUploadResponse(
                 true,
                 "⚠️ Duplicate file detected! This file already exists.",
                 fileName,
                 fileHash,
                 existingFileUrl,
+                existingFileName,
                 uploadDate
         );
     }
@@ -39,6 +41,7 @@ public class FileUploadResponse {
                 fileName,
                 fileHash,
                 s3Url,
+                null, // No existing file for successful uploads
                 LocalDateTime.now()
         );
     }

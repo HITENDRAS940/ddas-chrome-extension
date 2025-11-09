@@ -43,7 +43,7 @@ public class FileController {
         // Validate file
         if (file.isEmpty()) {
             return ResponseEntity.badRequest()
-                    .body(new FileUploadResponse(false, "File is empty", null, null, null, null));
+                    .body(new FileUploadResponse(false, "File is empty", null, null, null, null, null));
         }
 
         // Process file and check for duplicates using authenticated username
@@ -65,6 +65,32 @@ public class FileController {
         log.info("Fetching all files for user: {}", username);
         List<FileListResponse> files = fileService.getUserFiles(username);
         return ResponseEntity.ok(files);
+    }
+
+    /**
+     * Check if a file hash already exists for the authenticated user
+     * GET /api/files/check-hash/{hash}
+     */
+    @GetMapping("/check-hash/{hash}")
+    public ResponseEntity<?> checkFileHash(@PathVariable String hash) {
+        String username = authService.getCurrentUsername();
+        log.info("Checking hash {} for user: {}", hash, username);
+
+        boolean exists = fileService.checkHashExists(username, hash);
+
+        if (exists) {
+            // Hash exists - get the existing file info
+            String existingFileName = fileService.getFileNameByHash(username, hash);
+            return ResponseEntity.ok(new java.util.HashMap<String, Object>() {{
+                put("exists", true);
+                put("filename", existingFileName);
+            }});
+        } else {
+            // Hash doesn't exist
+            return ResponseEntity.ok(new java.util.HashMap<String, Object>() {{
+                put("exists", false);
+            }});
+        }
     }
 
     /**
