@@ -23,7 +23,6 @@ DDAS (Data Duplication Alert System) is a comprehensive file duplication detecti
 - [Project Structure](#-project-structure)
 - [Technologies Used](#-technologies-used)
 - [Troubleshooting](#-troubleshooting)
-- [Contributors](#-contributors)
 
 ---
 
@@ -562,26 +561,6 @@ tail -f /Users/hitendrasingh/Desktop/DDAS/server.log
 
 ---
 
-## 🤝 Contributors
-
-**Developed by:**
-- **Hitendra Singh** - Backend Development & System Architecture
-- **Dhruv Maheshwari** - Extension Development & Integration
-
-**Project Supervisor:** [Teacher Name]
-
-**Institution:** [University/College Name]
-
-**Year:** 2025
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
 ## 🌟 Acknowledgments
 
 - Chrome Extension documentation
@@ -636,4 +615,3 @@ Potential features for future versions:
 ⭐ Star this repo if you find it helpful!
 
 </div>
-
