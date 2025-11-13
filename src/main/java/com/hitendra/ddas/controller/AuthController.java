@@ -86,7 +86,6 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         }
     }
-
     /**
      * Health check for auth service
      */
@@ -95,4 +94,3 @@ public class AuthController {
         return ResponseEntity.ok("Auth Service is running! 🔐");
     }
 }
-

@@ -28,4 +28,3 @@ public interface FileRecordRepository extends JpaRepository<FileRecord, Long> {
      */
     boolean existsByUserIdAndFileHash(String userId, String fileHash);
 }
-

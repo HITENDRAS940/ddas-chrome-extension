@@ -82,8 +82,7 @@ public class EmailService {
             
             If you didn't request this verification code, please ignore this email.
             
-            Best regards,
-            DDAS Team
+            Best regards
             """, purpose, otp);
     }
 

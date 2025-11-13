@@ -1,0 +1,415 @@
+================================================================================
+                DDAS - DATA DUPLICATION ALERT SYSTEM
+                     Complete System Flow Documentation
+                        Project Presentation Guide
+================================================================================
+
+Created by: Hitendra Singh & Dhruv Maheshwari
+Date: November 9, 2025
+Project Type: Chrome Extension + Spring Boot Backend + AWS Integration
+
+================================================================================
+                              PROJECT OVERVIEW
+================================================================================
+
+DDAS is a comprehensive file duplication detection system that automatically
+monitors downloads and helps users identify and manage duplicate files. The
+system combines a Chrome extension, Java Spring Boot backend, Python local
+server, and AWS services for a complete solution.
+
+Key Features:
+• Automatic download monitoring
+• Real-time duplicate detection using SHA-256 hashing
+• User choice for duplicate file management (delete/keep)
+• Secure authentication with OTP verification
+• AWS S3 integration for scalable storage
+• Local HTTP server for seamless browser integration
+
+================================================================================
+                           SYSTEM ARCHITECTURE
+================================================================================
+
+1. CHROME EXTENSION (Frontend)
+   - Background service worker for download monitoring
+   - Popup interface for user interaction
+   - Local storage for temporary data and history
+   - HTTP communication with local Python server
+
+2. PYTHON LOCAL SERVER (Middleware)
+   - Runs on localhost:5001
+   - Bridges Chrome extension and Java backend
+   - Handles file processing requests
+   - Manages duplicate file deletion
+
+3. JAVA SPRING BOOT BACKEND (Core API)
+   - Runs on localhost:8080
+   - Authentication and authorization
+   - File processing and duplicate detection
+   - Database management (PostgresSQL)
+   - AWS S3 integration
+
+4. AWS SERVICES (Cloud Infrastructure)
+   - S3 for file hash storage
+   - Potential for scaling and additional services
+
+================================================================================
+                         COMPLETE USER FLOW WALKTHROUGH
+================================================================================
+
+PHASE 1: USER REGISTRATION & AUTHENTICATION
+================================================================================
+
+Step 1: Initial Extension Installation
+--------------------------------------
+• User installs DDAS Chrome extension from Chrome Web Store
+• Extension icon appears in browser toolbar
+• Background service worker starts monitoring downloads automatically
+• Extension shows "Please login first" when clicked initially
+
+Step 2: User Registration Process
+---------------------------------
+• User clicks extension icon → Auth screen appears
+• User fills signup form:
+  - Username (must be unique)
+  - Email address (for verification)
+  - Password (minimum 6 characters)
+• Click "Sign Up" button
+
+BACKEND PROCESSING (Signup):
+Java AuthController.signup() →
+  ├─ Validates input data (username, email, password)
+  ├─ Checks if username/email already exists
+  ├─ Hashes password using BCrypt
+  ├─ Creates User entity with PENDING status
+  ├─ Generates 6-digit OTP
+  ├─ Stores OTP in database with expiration
+  ├─ Sends verification email (simulated in development)
+  └─ Returns success response with OTP requirement
+
+Step 3: Email Verification
+--------------------------
+• System displays OTP input screen
+• User receives OTP via email (simulated: shown in logs)
+• User enters 6-digit verification code
+• Click "Verify & Login"
+
+BACKEND PROCESSING (Verification):
+AuthController.verifyEmail() →
+  ├─ Validates OTP format and expiration
+  ├─ Matches OTP with stored value
+  ├─ Updates User status to ACTIVE
+  ├─ Generates JWT authentication token
+  ├─ Deletes used OTP from database
+  └─ Returns auth token and user info
+
+Step 4: Successful Authentication
+---------------------------------
+• Extension stores JWT token in chrome.storage
+• UI switches to main dashboard
+• Shows welcome message with username
+• Displays "Recent Activity" (initially empty)
+• Extension is now ready to monitor downloads
+
+PHASE 2: DOWNLOAD MONITORING & FILE PROCESSING
+================================================================================
+
+Step 5: Automatic Download Detection
+------------------------------------
+• User downloads any file in Chrome browser
+• Chrome fires downloads API event
+• Extension background worker detects download
+
+BACKGROUND PROCESSING:
+background_http.js chrome.downloads.onCreated listener →
+  ├─ Captures download metadata (filename, path, URL)
+  ├─ Generates unique storage key
+  ├─ Stores pending download in chrome.storage.local
+  ├─ Sets download completion listener
+  └─ Waits for download to finish
+
+Step 6: User Consent Request
+----------------------------
+• Download completes successfully
+• Extension popup shows notification badge
+• User clicks extension icon
+• "Pending Downloads" section appears with new file
+• Shows file details: name, download time, size
+• Presents two options:
+  - "✓ Check File" (process for duplicates)
+  - "✗ Skip" (ignore this file)
+
+Step 7A: User Chooses to SKIP File
+-----------------------------------
+• User clicks "Skip" button
+• File marked as skipped in chrome.storage
+• Added to Recent Activity with:
+  - Icon: ⏭️
+  - Status: "File Skipped"
+  - Message: "Processing skipped by user"
+• File remains in Downloads folder untouched
+• Pending item removed from UI
+
+Step 7B: User Chooses to CHECK File
+------------------------------------
+• User clicks "Check File" button
+• Processing animation begins with 4 steps:
+  1. "✅ File hash calculated"
+  2. "🔗 Connecting to server..."
+  3. "🔎 Checking for duplicates..."
+  4. "📤 Processing result..."
+
+PROCESSING PIPELINE:
+
+Chrome Extension (popup.js) →
+  ├─ Shows processing UI with steps
+  ├─ Calls processFileWithServer()
+  └─ Sends HTTP request to Python server
+
+Python Server (server.py) →
+  ├─ Receives file path and auth token
+  ├─ Validates file exists and auth token
+  ├─ Calculates SHA-256 hash of file
+  ├─ Makes API call to Java backend
+  └─ Returns duplicate check result
+
+Java Backend File Processing:
+FileController.processFile() →
+  ├─ Authenticates user via JWT
+  ├─ Validates file upload
+  └─ Calls FileService.processFile()
+
+FileService.processFile() →
+  ├─ Generates SHA-256 hash via HashService
+  ├─ Queries database for existing hash
+  ├─ IF DUPLICATE FOUND:
+  │   ├─ Retrieves existing file metadata
+  │   ├─ Returns duplicate response with:
+  │   │   - original filename
+  │   │   - upload date
+  │   │   - file hash
+  │   └─ duplicate: true
+  └─ IF NO DUPLICATE:
+      ├─ Uploads hash to AWS S3 via S3Service
+      ├─ Saves file metadata to database
+      ├─ Creates FileRecord entity
+      └─ Returns success response
+
+PHASE 3: DUPLICATE DETECTION & USER CHOICE
+================================================================================
+
+Step 8A: NO DUPLICATE FOUND
+----------------------------
+• Processing completes successfully
+• Extension shows success message
+• Added to Recent Activity with:
+  - Icon: ✅
+  - Status: "File Processed"
+  - Message: "No duplicates found"
+• File remains in Downloads folder
+• User can continue using system normally
+
+Step 8B: DUPLICATE DETECTED
+----------------------------
+• System finds matching file hash
+• Processing step 3 completes with duplicate detection
+• Extension shows duplicate choice dialog:
+
+DUPLICATE DIALOG DISPLAY:
+┌─────────────────────────────────────┐
+│        ⚠️ Duplicate File Detected    │
+├─────────────────────────────────────┤
+│ File: newdocument.pdf               │
+│ Already exists as: document.pdf     │
+│                                     │
+│ What would you like to do with the  │
+│ duplicate file in Downloads?        │
+├─────────────────────────────────────┤
+│  🗑️ Delete from Downloads           │
+│  📁 Keep in Downloads              │
+└─────────────────────────────────────┘
+
+Step 9: User Duplicate Management Choice
+-----------------------------------------
+
+OPTION A - DELETE DUPLICATE:
+• User clicks "🗑️ Delete from Downloads"
+• Extension calls deleteDuplicateFile()
+• Python server receives delete request
+• Validates file path is in Downloads folder (security)
+• Deletes physical file using os.remove()
+• Returns success confirmation
+• Extension updates Recent Activity:
+  - Icon: 🗑️
+  - Status: "Duplicate Deleted"
+  - Message: "Deleted from Downloads. Original: document.pdf"
+  - Color: Green border
+
+OPTION B - KEEP DUPLICATE:
+• User clicks "📁 Keep in Downloads"
+• No file system changes made
+• Extension updates Recent Activity:
+  - Icon: 📁
+  - Status: "Duplicate Kept"
+  - Message: "Kept in Downloads. Original: document.pdf"
+  - Color: Blue border
+
+PHASE 4: HISTORY & ONGOING MONITORING
+================================================================================
+
+Step 10: Recent Activity Management
+-----------------------------------
+• All actions recorded in chrome.storage.local
+• History limited to last 20 items
+• Color-coded status cards:
+  - Green: Success/Deleted duplicates
+  - Blue: Kept duplicates
+  - Gray: Skipped files
+  - Red: Errors
+• Timestamps show when actions occurred
+• Clicking extension icon shows current status
+
+Step 11: Continuous Monitoring
+------------------------------
+• Extension continues monitoring all downloads
+• Each new download triggers the same flow
+• User builds up processing history over time
+• Can skip confidential files, process public files
+• System learns user's file patterns
+
+PHASE 5: ADDITIONAL FEATURES
+================================================================================
+
+Security Features:
+• JWT-based authentication
+• Password hashing with BCrypt
+• OTP email verification
+• Secure file path validation
+• CORS protection for API endpoints
+
+Data Management:
+• SHA-256 hashing for reliable duplicate detection
+• Database storage of file metadata (not content)
+• AWS S3 integration for hash storage
+• Local storage for extension state
+
+Error Handling:
+• Network failure recovery
+• Server unavailability detection
+• File permission error handling
+• Invalid authentication management
+• Graceful degradation when services unavailable
+
+User Experience:
+• Real-time processing feedback
+• Clear visual indicators for all states
+• Animated UI transitions
+• Toast notifications for actions
+• Comprehensive activity history
+
+================================================================================
+                              TECHNICAL STACK
+================================================================================
+
+FRONTEND:
+• Chrome Extension Manifest V3
+• JavaScript ES6+ with async/await
+• Chrome APIs (downloads, storage, notifications)
+• HTML5 + CSS3 for responsive UI
+• Local storage for persistence
+
+MIDDLEWARE:
+• Python 3.x with Flask framework
+• HTTP server on localhost:5001
+• File system operations
+• JSON API communication
+• Error handling and logging
+
+BACKEND:
+• Java 17 with Spring Boot 3.x
+• Spring Security with JWT authentication
+• Spring Data JPA for database operations
+• Maven for dependency management
+• H2/MySQL database support
+
+CLOUD SERVICES:
+• AWS S3 for file hash storage
+• AWS SDK for Java integration
+• RESTful API design
+• Scalable cloud architecture
+
+SECURITY:
+• BCrypt password hashing
+• JWT token authentication
+• OTP email verification
+• Input validation and sanitization
+• CORS configuration
+
+================================================================================
+                           PROJECT BENEFITS
+================================================================================
+
+For End Users:
+• Prevents storage waste from duplicate files
+• Automatic monitoring requires no manual effort
+• Clear choices for file management
+• Secure and private file processing
+• Seamless browser integration
+
+For Organizations:
+• Reduces storage costs
+• Improves file organization
+• Prevents data redundancy
+• Scalable cloud-based solution
+• Audit trail for file activities
+
+Technical Benefits:
+• Microservices architecture
+• Cloud-native design
+• Modern technology stack
+• Extensible and maintainable code
+• Comprehensive error handling
+
+================================================================================
+                            FUTURE ENHANCEMENTS
+================================================================================
+
+Planned Features:
+• Machine learning for smart duplicate detection
+• Multi-cloud support (Google Drive, Dropbox)
+• Team collaboration features
+• Advanced file analytics
+• Mobile app companion
+• Batch file processing
+• Content-based duplicate detection
+• File preview capabilities
+• Advanced search and filtering
+• Export/import functionality
+
+================================================================================
+                              CONCLUSION
+================================================================================
+
+DDAS demonstrates a complete full-stack application combining:
+• Modern web extension development
+• Microservices architecture
+• Cloud integration
+• Secure authentication
+• Real-time processing
+• User-centric design
+
+The project showcases proficiency in:
+• JavaScript and Chrome Extension APIs
+• Java Spring Boot development
+• Python Flask integration
+• AWS cloud services
+• Database design and management
+• RESTful API development
+• Security best practices
+• User experience design
+
+This comprehensive system solves a real-world problem while demonstrating
+advanced technical skills across multiple technologies and platforms.
+
+================================================================================
+                          END OF DOCUMENTATION
+================================================================================
