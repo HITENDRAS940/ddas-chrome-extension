@@ -5,7 +5,6 @@
 DDAS (Data Duplication Alert System) is a comprehensive file duplication detection system that automatically monitors your downloads and helps you identify and manage duplicate files. Built with a Chrome extension frontend, Spring Boot backend, Python middleware, and AWS cloud integration.
 
 ![Version](https://img.shields.io/badge/version-3.0.0-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
 ![Java](https://img.shields.io/badge/Java-17-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.7-brightgreen)
 ![Python](https://img.shields.io/badge/Python-3.x-yellow)
@@ -598,7 +597,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 For issues, questions, or contributions:
 
 - **Issues**: Open an issue on GitHub
-- **Email**: [your-email@example.com]
+- **Email**: hitendras940@gmail.com
 - **Documentation**: See `DDAS_COMPLETE_SYSTEM_FLOW.txt` for detailed flow
 
 ---
